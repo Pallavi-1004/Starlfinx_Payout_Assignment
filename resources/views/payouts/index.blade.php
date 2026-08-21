@@ -17,11 +17,24 @@
         .success { background: #e1f5e4; color: #155724; }
         .error { background: #fde2e2; color: #842029; }
         .pagination button { cursor: pointer; }
+        .balance { font-size: 1.4rem; font-weight: bold; margin-bottom: 1rem; }
+        .balance-add-button { padding: .2rem .6rem; margin-left: .5rem; cursor: pointer; font-size: 1.2rem; }
+        #balance-form { display: none; }
     </style>
 </head>
 <body>
     <h1>Payout Management</h1>
     <div id="message" class="message"></div>
+    <div class="balance">
+        Current Balance: <span id="balance-amount">Loading...</span>
+        <button type="button" id="show-balance-form" class="balance-add-button" aria-label="Add balance" title="Add balance">+</button>
+    </div>
+
+   
+    <form id="balance-form">
+        <input name="amount" type="number" min="0.01" step="0.01" placeholder="Amount to add" required>
+        <button type="submit">Add Balance</button>
+    </form>
 
     <form id="filter-form">
         <label>Transaction ID <input type="text" id="filter-transaction-id"></label>
@@ -52,13 +65,20 @@
         $.ajaxSetup({ headers: { 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' } });
 
         function showMessage(text, type) {
-            $('#message').removeClass('success error').addClass(type).text(text).show();
+            $('#message').stop(true, true).removeClass('success error').addClass(type).text(text).show();
+            setTimeout(function () { $('#message').fadeOut(); }, 1500);
         }
 
         function apiError(xhr) {
             var response = xhr.responseJSON || {};
             var errors = response.errors ? ' ' + Object.keys(response.errors).map(function (key) { return response.errors[key].join(' '); }).join(' ') : '';
             showMessage((response.message || 'Request failed.') + errors, 'error');
+        }
+
+        function loadBalance() {
+            $.getJSON('/api/balance').done(function (response) {
+                $('#balance-amount').text(parseFloat(response.data.balance).toFixed(2));
+            }).fail(apiError);
         }
 
         function loadPayouts(page) {
@@ -81,8 +101,18 @@
         $('#create-form').on('submit', function (event) {
             event.preventDefault();
             $.post('/api/payouts', $(this).serialize()).done(function (response) {
-                showMessage(response.message, 'success'); $('#create-form')[0].reset(); loadPayouts(1);
+                showMessage(response.message, 'success'); $('#create-form')[0].reset(); loadPayouts(1); loadBalance();
             }).fail(apiError);
+        });
+        $('#balance-form').on('submit', function (event) {
+            event.preventDefault();
+            $.post('/api/balance/add', $(this).serialize()).done(function (response) {
+                showMessage(response.message, 'success'); $('#balance-form')[0].reset(); $('#balance-form').slideUp(); loadBalance();
+            }).fail(apiError);
+        });
+        $('#show-balance-form').on('click', function () {
+            $('#balance-form').slideToggle();
+            $('#balance-form input[name="amount"]').trigger('focus');
         });
         $(document).on('click', '.pagination button:not(:disabled)', function () { loadPayouts($(this).data('page')); });
         $(document).on('click', '.status-button', function () {
@@ -90,6 +120,8 @@
             $.ajax({ url: '/api/payouts/' + button.data('id') + '/status', method: 'PATCH', data: { status: button.data('status') } }).done(function (response) { showMessage(response.message, 'success'); loadPayouts(1); }).fail(apiError);
         });
         loadPayouts(1);
+        loadBalance();
+        setInterval(loadBalance, 5000);
     </script>
 </body>
 </html>

@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\BalanceController;
 use App\Http\Controllers\Api\PayoutController;
 
 /*
@@ -17,3 +18,5 @@ use App\Http\Controllers\Api\PayoutController;
 Route::get('/payouts', [PayoutController::class, 'index']);
 Route::post('/payouts', [PayoutController::class, 'store']);
 Route::patch('/payouts/{id}/status', [PayoutController::class, 'updateStatus']);
+Route::get('/balance', [BalanceController::class, 'show']);
+Route::post('/balance/add', [BalanceController::class, 'add']);

@@ -27,6 +27,24 @@ class PayoutTest extends TestCase
         $this->assertDatabaseHas('balances', ['balance' => '95000.00']);
     }
 
+    public function test_balance_can_be_retrieved_and_added()
+    {
+        $this->getJson('/api/balance')->assertOk()->assertJsonPath('data.balance', '100000.00');
+
+        $this->postJson('/api/balance/add', ['amount' => 2500])
+            ->assertOk()
+            ->assertJsonPath('data.balance', '102500.00');
+
+        $this->assertDatabaseHas('balances', ['balance' => '102500.00']);
+    }
+
+    public function test_balance_addition_requires_a_positive_amount()
+    {
+        $this->postJson('/api/balance/add', ['amount' => 0])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['amount']);
+    }
+
     public function test_duplicate_transaction_id_is_rejected()
     {
         Payout::factory()->create(['transaction_id' => 'TXN10001']);
@@ -51,6 +69,24 @@ class PayoutTest extends TestCase
         $payout = Payout::factory()->create();
         $this->patchJson('/api/payouts/' . $payout->id . '/status', ['status' => PayoutStatus::SUCCESS])->assertOk()->assertJsonPath('data.status', PayoutStatus::SUCCESS);
         $this->assertDatabaseHas('payouts', ['id' => $payout->id, 'status' => PayoutStatus::SUCCESS]);
+    }
+
+    public function test_failed_payout_amount_is_returned_to_balance_once()
+    {
+        $this->postJson('/api/payouts', ['transaction_id' => 'TXN10004', 'beneficiary_name' => 'Jane', 'amount' => 5000])
+            ->assertCreated();
+
+        $payout = Payout::query()->where('transaction_id', 'TXN10004')->first();
+        $this->assertDatabaseHas('balances', ['balance' => '95000.00']);
+
+        $this->patchJson('/api/payouts/' . $payout->id . '/status', ['status' => PayoutStatus::FAILED])
+            ->assertOk()
+            ->assertJsonPath('data.status', PayoutStatus::FAILED);
+        $this->assertDatabaseHas('balances', ['balance' => '100000.00']);
+
+        $this->patchJson('/api/payouts/' . $payout->id . '/status', ['status' => PayoutStatus::FAILED])
+            ->assertStatus(422);
+        $this->assertDatabaseHas('balances', ['balance' => '100000.00']);
     }
 
     public function test_completed_payout_cannot_change_status()
