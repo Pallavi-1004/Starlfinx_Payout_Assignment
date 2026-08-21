@@ -38,9 +38,23 @@ class PayoutService
             throw new InvalidArgumentException('Only pending payouts can be marked as success or failed.');
         }
 
-        $payout->status = $newStatus;
-        $payout->save();
+        return DB::transaction(function () use ($payout, $newStatus) {
+            $payout = Payout::query()->lockForUpdate()->findOrFail($payout->id);
 
-        return $payout->fresh();
+            if ($payout->status !== PayoutStatus::PENDING) {
+                throw new InvalidArgumentException('Only pending payouts can be marked as success or failed.');
+            }
+
+            if ($newStatus === PayoutStatus::FAILED) {
+                $balance = Balance::query()->lockForUpdate()->firstOrCreate([], ['balance' => 0]);
+                $balance->balance = (float) $balance->balance + (float) $payout->amount;
+                $balance->save();
+            }
+
+            $payout->status = $newStatus;
+            $payout->save();
+
+            return $payout->fresh();
+        });
     }
 }
